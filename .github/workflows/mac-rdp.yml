@@ -1,0 +1,43 @@
+name: macOS Remote Desktop
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mac-desktop:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          tags: tag:ci
+
+      - name: Enable VNC and Set Password
+        run: |
+          sudo dscl . -create /Users/vncuser
+          sudo dscl . -create /Users/vncuser UserShell /bin/bash
+          sudo dscl . -create /Users/vncuser RealName "VNC User"
+          sudo dscl . -create /Users/vncuser UniqueID 1001
+          sudo dscl . -create /Users/vncuser PrimaryGroupID 80
+          sudo dscl . -create /Users/vncuser NFSHomeDirectory /Users/vncuser
+          sudo dscl . -passwd /Users/vncuser P@ssw0rd123!
+          sudo createhomedir -c -u vncuser
+          sudo dscl . -append /Groups/admin GroupMembership vncuser
+          
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate -configure -allowAccessFor -allUsers -privs -all
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console
+
+      - name: Keep Session Alive
+        run: |
+          echo "=== Mac is ready ==="
+          echo "Tailscale IP:"
+          tailscale ip -4
+          echo "Username: vncuser"
+          echo "Password: P@ssw0rd123!"
+          sleep 21600
