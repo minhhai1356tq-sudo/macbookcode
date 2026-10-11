@@ -6,7 +6,7 @@ on:
 jobs:
   mac-desktop:
     runs-on: macos-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,27 +17,28 @@ jobs:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
           tags: tag:ci
 
-      - name: Enable VNC and Set Password
+      - name: Enable VNC
+        env:
+          VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
         run: |
-          sudo dscl . -create /Users/vncuser
-          sudo dscl . -create /Users/vncuser UserShell /bin/bash
-          sudo dscl . -create /Users/vncuser RealName "VNC User"
-          sudo dscl . -create /Users/vncuser UniqueID 1001
-          sudo dscl . -create /Users/vncuser PrimaryGroupID 80
-          sudo dscl . -create /Users/vncuser NFSHomeDirectory /Users/vncuser
-          sudo dscl . -passwd /Users/vncuser P@ssw0rd123!
-          sudo createhomedir -c -u vncuser
-          sudo dscl . -append /Groups/admin GroupMembership vncuser
-          
+          # VNC legacy chỉ đọc 8 ký tự đầu, dài hơn sẽ bị cắt im lặng
+          if [ "${#VNC_PASSWORD}" -gt 8 ]; then
+            echo "VNC_PASSWORD phải tối đa 8 ký tự"
+            exit 1
+          fi
+
           sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-            -activate -configure -allowAccessFor -allUsers -privs -all
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console
+            -activate -configure -access -on \
+            -clientopts -setvnclegacy -vnclegacy yes \
+            -clientopts -setvncpw -vncpw "$VNC_PASSWORD" \
+            -restart -agent -privs -all
+
+          echo "Console user: $(stat -f%Su /dev/console)"
+          sudo lsof -iTCP:5900 -sTCP:LISTEN || echo "Không có gì lắng nghe port 5900"
 
       - name: Keep Session Alive
         run: |
           echo "=== Mac is ready ==="
           echo "Tailscale IP:"
           tailscale ip -4
-          echo "Username: vncuser"
-          echo "Password: P@ssw0rd123!"
           sleep 21600
